@@ -188,6 +188,13 @@ func (tg *testGroup) test(evalInterval time.Duration, groupOrderMap map[string]i
 	// Map of all the unit tests for given eval_time.
 	alertTests := make(map[model.Duration][]alertTestCase)
 	for _, alert := range tg.AlertRuleTests {
+		if alert.Alertname == "" {
+			var testGroupLog string
+			if tg.TestGroupName != "" {
+				testGroupLog = fmt.Sprintf(" (in TestGroup %s)", tg.TestGroupName)
+			}
+			return []error{errors.Errorf("an item under alert_rule_test misses required attribute alertname at eval_time %v%s", alert.EvalTime, testGroupLog)}
+		}
 		alertEvalTimesMap[alert.EvalTime] = struct{}{}
 
 		if _, ok := alertsInTest[alert.EvalTime]; !ok {
@@ -221,6 +228,7 @@ func (tg *testGroup) test(evalInterval time.Duration, groupOrderMap map[string]i
 	var errs []error
 	for ts := mint; ts.Before(maxt) || ts.Equal(maxt); ts = ts.Add(evalInterval) {
 		// Collects the alerts asked for unit testing.
+		var evalErrs []error
 		suite.WithSamplesTill(ts, func(err error) {
 			if err != nil {
 				errs = append(errs, err)
@@ -230,13 +238,16 @@ func (tg *testGroup) test(evalInterval time.Duration, groupOrderMap map[string]i
 				g.Eval(suite.Context(), ts)
 				for _, r := range g.Rules() {
 					if r.LastError() != nil {
-						errs = append(errs, errors.Errorf("    rule: %s, time: %s, err: %v",
+						evalErrs = append(evalErrs, errors.Errorf("    rule: %s, time: %s, err: %v",
 							r.Name(), ts.Sub(time.Unix(0, 0).UTC()), r.LastError()))
 					}
 				}
 			}
 		})
-		if len(errs) > 0 {
+		errs = append(errs, evalErrs...)
+		// Only end testing at this point if errors occurred evaluating above,
+		// rather than any test failures already collected in errs.
+		if len(evalErrs) > 0 {
 			return errs
 		}
 
