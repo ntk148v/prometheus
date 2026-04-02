@@ -496,6 +496,9 @@ func main() {
 	serverOnlyFlag(a, "storage.tsdb.allow-overlapping-compaction", "Allow compaction of overlapping blocks. If set to false, TSDB stops vertical compaction and leaves overlapping blocks there. The use case is to let another component handle the compaction of overlapping blocks.").
 		Default("true").Hidden().BoolVar(&cfg.tsdb.EnableOverlappingCompaction)
 
+	serverOnlyFlag(a, "storage.tsdb.stripe-size", "The number of entries to allocate in the stripeSeries hash map, it must be a power of 2. A larger StripeSize will allocate more memory up-front, but will increase performance when handling a large number of series. A smaller StripeSize reduces the memory allocated, but can decrease performance with large number of series.").
+		Default(strconv.Itoa(tsdb.DefaultStripeSize)).Hidden().IntVar(&cfg.tsdb.StripeSize)
+
 	var (
 		tsdbWALCompression       bool
 		tsdbWALCompressionType   string
@@ -528,6 +531,8 @@ func main() {
 	agentOnlyFlag(a, "storage.agent.wal-segment-size",
 		"Size at which to split WAL segment files. Example: 100MB").
 		Hidden().PlaceHolder("<bytes>").BytesVar(&cfg.agent.WALSegmentSize)
+	agentOnlyFlag(a, "storage.agent.stripe-size", "The number of entries to allocate in the stripeSeries hash map, it must be a power of 2. A larger StripeSize will allocate more memory up-front, but will increase performance when handling a large number of series. A smaller StripeSize reduces the memory allocated, but can decrease performance with large number of series.").
+		Default(strconv.Itoa(tsdb.DefaultStripeSize)).Hidden().IntVar(&cfg.agent.StripeSize)
 
 	var (
 		agentWALCompression     bool
@@ -1444,6 +1449,7 @@ func main() {
 					"BlockReloadInterval", cfg.tsdb.BlockReloadInterval,
 					"EnableSTAsZeroSample", cfg.tsdb.EnableSTAsZeroSample,
 					"EnableSTStorage", cfg.tsdb.EnableSTStorage,
+					"StripeSize", cfg.tsdb.StripeSize,
 				)
 
 				startTimeMargin := int64(2 * time.Duration(cfg.tsdb.MinBlockDuration).Seconds() * 1000)
@@ -1504,6 +1510,7 @@ func main() {
 					"OutOfOrderTimeWindow", cfg.agent.OutOfOrderTimeWindow,
 					"EnableSTAsZeroSample", cfg.agent.EnableSTAsZeroSample,
 					"EnableSTStorage", cfg.tsdb.EnableSTStorage,
+					"StripeSize", cfg.agent.StripeSize,
 				)
 
 				localStorage.Set(db, 0)
